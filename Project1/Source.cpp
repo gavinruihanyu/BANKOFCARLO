@@ -16,6 +16,14 @@ using bsoncxx::builder::stream::open_document;
 
 mongocxx::instance instance{};// don't put inside main 
 
+class user_account
+{public:
+	std::string user_email;
+	std::string user_password;
+	std::string account_balance = "0";
+};
+
+
 void welcome_screen()
 {
 	std::cout << " ******       **     ****     ** **   **         *******   ********         ******      **     *******   **         *******  \n/*////**     ****   /**/**   /**/**  **         **/////** /**/////         **////**    ****   /**////** /**        **/////** \n/*   /**    **//**  /**//**  /**/** **         **     //**/**             **    //    **//**  /**   /** /**       **     //**\n/******    **  //** /** //** /**/****         /**      /**/*******       /**         **  //** /*******  /**      /**      /**\n/*//// ** **********/**  //**/**/**/**        /**      /**/**////        /**        **********/**///**  /**      /**      /**\n/*    /**/**//////**/**   //****/**//**       //**     ** /**            //**    **/**//////**/**  //** /**      //**     ** \n/******* /**     /**/**    //***/** //**       //*******  /**             //****** /**     /**/**   //**/******** //*******  \n///////  //      // //      /// //   //         ///////   //               //////  //      // //     // ////////   ///////   \n";
@@ -53,7 +61,15 @@ int menu_val(const std::string* options)
 
 void menu()
 {
-	return;
+	int n = 100;
+	char* str = new char[n];
+	system("CLS");
+	std::cout << "------------------------------------------------------------------------------------------------------------------------------\n";
+	std::cout << "Your Account\n";
+	std::cout << "------------------------------------------------------------------------------------------------------------------------------\n\n\n\n";
+
+	std::cin >> str;
+	delete(str);
 }
 
 int login(mongocxx::collection *collection)
@@ -70,10 +86,17 @@ int login(mongocxx::collection *collection)
 		//add some security shit here or else your databse gonna be hackers playground ^
 		
 		//find document by field
-		maybe_result = collection->find_one(document{} << "account email" << response << finalize);
+		maybe_result = collection->find_one(document{} << "account_email" << response << finalize);
 		if (maybe_result)	break;
 
-		std::cout << "Email not registered. Try again(1), Create account(2)";
+		std::cout << "\nEmail not registered. Try again(1), Create account(2)\n> ";
+		std::string options[] =
+		{
+			"1", "2", "try again", "create account"
+		};
+		int choice = menu_val(options);
+
+		if (choice == 1 || choice == 3) return 2;
 		//set options and invoke menu_val function
 	}
 	std::cout << "Account Passcode: ";
@@ -85,13 +108,10 @@ int login(mongocxx::collection *collection)
 		std::cout << "\n";
 		bsoncxx::document::view view = maybe_result->view();
 		std::string password = bsoncxx::to_json(view);
-		std::string match = "account password\" : \"";
+		std::string match = "account_password\" : \"";
 		match.append(response);
 
-		if (password.find(match) != std::string::npos)
-		{
-			return 1;
-		}
+		if (password.find(match) != std::string::npos)	return 1;
 	
 		std::cout << "Invalid password, try again: ";
 		i++;
@@ -100,11 +120,95 @@ int login(mongocxx::collection *collection)
 
 }
 
-int register_account()
+void register_account(mongocxx::collection *collection)
 {
+	user_account new_user;
+	std::string input;
+	std::cout << "Welcome to Bank Of Carlo, we are pleased to have you!\n";
+	while (true)
+	{
+		std::string confirm;
+		std::cout << "Please enter a valid email that you will use to log into your account with: ";
+		std::getline(std::cin, input);
+		std::cout << "\n";
+		std::cout << "Please confirm email: ";
+		std::getline(std::cin, confirm);
+		if (confirm == input)
+		{
+			new_user.user_email = input;
+			std::cout << "\n";
+			break;
+		}
+		std::cout << "Emails did not match, please try again:\n";
+	}
+	while (true)
+	{
+		std::string confirm;
+		std::cout << "Please enter a password: ";
+		std::getline(std::cin, input);
+		std::cout << "\n";
+		std::cout << "Please confirm password: ";
+		std::getline(std::cin, confirm);
+		if (confirm == input)
+		{
+			new_user.user_password = input; 
+			std::cout << "\n";
+			break;
+		}
+		std::cout << "Passwords did not match, please try again:\n";
+	}
+
+	//build document
+	bsoncxx::builder::stream::document builder = bsoncxx::builder::stream::document{};
+	bsoncxx::document::value data_wrote = builder
+		<< "account_email" << new_user.user_email
+		<< "account_balance" << new_user.account_balance
+		<< "account_password" << new_user.user_password
+		<< bsoncxx::builder::stream::finalize;
+	//moving the data_wrote to data view so we can work with it post creation
+	bsoncxx::document::view data = data_wrote.view();
+	//insert data to collection and store the result in result 
+	bsoncxx::stdx::optional<mongocxx::result::insert_one> result = collection->insert_one(data);
+
+}
+
+int main() //dont forget to minimize function stacking 
+{		
+	while (true)
+	{	
+
+		mongocxx::uri uri("mongodb://localhost:27017");
+		mongocxx::client client(uri);
+
+		//connect to db then collection
+		mongocxx::database db = client["BankOfCarlo"];
+		mongocxx::collection accounts = db["accounts"];
+
+		//for welcome screen
+		welcome_screen();
+		int response;
+		std::string option[] = {"1","2", "login", "register"};
+		response = menu_val(option);
+
+		system("CLS");
+
+		if (response == 0 || response == 2)//login
+		{
+			//if user aborts login
+			int logged_in = login(&accounts);
+			if (!logged_in)	return EXIT_SUCCESS;
+			else if (logged_in == 2) register_account(&accounts);
+			else if (logged_in == 1) menu();
+		}
+		if (response == 1 || response == 3)//register
+		{
+			register_account(&accounts);
+		}
+	}
 	return EXIT_SUCCESS;
 }
 
+/*
 void connect_to_mongo()
 {
 
@@ -136,37 +240,4 @@ void connect_to_mongo()
 	//insert data to collection and store the result in result 
 	bsoncxx::stdx::optional<mongocxx::result::insert_one> result = accounts.insert_one(data);
 }
-
-
-int main() //dont forget to minimize function stacking 
-{
-	//for welcome screen
-	welcome_screen();
-	int response;
-	std::string option[] = { "1","2", "login", "register" };
-	response = menu_val(option);
-
-	system("CLS");
-
-	mongocxx::uri uri("mongodb://localhost:27017");
-	mongocxx::client client(uri);
-
-	//connect to db then collection
-	mongocxx::database db = client["BankOfCarlo"];
-	mongocxx::collection accounts = db["accounts"];
-
-	if (response == 0 || response == 2)//login
-	{
-		//if user aborts login
-		if (!login(&accounts))	return EXIT_SUCCESS;
-		menu();
-	}
-	else if (response == 1 || response == 3)//register
-	{
-		//if user aborts registeration
-		if (!register_account())	return EXIT_SUCCESS;
-		menu();
-	}
-
-	return EXIT_SUCCESS;
-}
+*/
