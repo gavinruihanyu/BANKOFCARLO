@@ -2,13 +2,12 @@
 #include <iostream>
 #include <string>
 #include <stdlib.h>
-
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
+#include <bsoncxx/types.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
-
 
 using bsoncxx::builder::stream::close_document;
 using bsoncxx::builder::stream::document;
@@ -52,54 +51,65 @@ int menu_val(const std::string* options)
 	}
 }
 
-void menu();
-
-int login() 
+void menu()
 {
-	std::string reponse;
+	return;
+}
+
+int login(mongocxx::collection *collection)
+{
+	std::string response;
+	//document found
+	bsoncxx::stdx::optional<bsoncxx::document::value> maybe_result;
+
 	while (true)
 	{
 		std::cout << "Account Email: ";
-		std::getline(std::cin, reponse);
+		std::getline(std::cin, response);
+		std::cout << "\n";
+		//add some security shit here or else your databse gonna be hackers playground ^
+		
+		//find document by field
+		maybe_result = collection->find_one(document{} << "account email" << response << finalize);
+		if (maybe_result)	break;
 
-
-
+		std::cout << "Email not registered. Try again(1), Create account(2)";
+		//set options and invoke menu_val function
 	}
-	return EXIT_SUCCESS;
+	std::cout << "Account Passcode: ";
+	unsigned int i = 0;
+	while (true)
+	{
+		if (i == 2) break;
+		std::getline(std::cin, response);
+		std::cout << "\n";
+		bsoncxx::document::view view = maybe_result->view();
+		std::string password = bsoncxx::to_json(view);
+		std::string match = "account password\" : \"";
+		match.append(response);
+
+		if (password.find(match) != std::string::npos)
+		{
+			return 1;
+		}
+	
+		std::cout << "Invalid password, try again: ";
+		i++;
+	}
+	return 0;
 
 }
 
 int register_account()
 {
-
 	return EXIT_SUCCESS;
 }
 
-
-int main() 
+void connect_to_mongo()
 {
+
 	mongocxx::uri uri("mongodb://localhost:27017");
 	mongocxx::client client(uri);
-
-	//for welcome screen
-	int response;
-	std::string option[] = { "1","2", "login", "register" };
-
-	//response = menu_val(option);
-
-	system("CLS");
-	/*if (response == 0 || response == 2)//login
-	{
-		//if user aborts login
-		if (!login()) return EXIT_SUCCESS;
-		menu();
-	}
-	else if (response == 1 || response == 3)//register
-	{
-		//if user aborts registeration
-		if (!register_account())	return EXIT_SUCCESS;
-		menu();
-	}*/
 
 	//connect to db then collection
 	mongocxx::database db = client["BankOfCarlo"];
@@ -111,20 +121,52 @@ int main()
 		<< "name" << "MongoDB"
 		<< "type" << "database"
 		<< "count" << 1
-		<< "versions" 
-			<< bsoncxx::builder::stream::open_array
-				<< "v3.2" << "v3.0" << "v2.6"
-					<< bsoncxx::builder::stream::close_array
-						<< "info" 
-					<< bsoncxx::builder::stream::open_document
-				<< "x" << 203
-				<< "y" << 102
-			<< bsoncxx::builder::stream::close_document
+		<< "versions"
+		<< bsoncxx::builder::stream::open_array
+		<< "v3.2" << "v3.0" << "v2.6"
+		<< bsoncxx::builder::stream::close_array
+		<< "info"
+		<< bsoncxx::builder::stream::open_document
+		<< "x" << 203
+		<< "y" << 102
+		<< bsoncxx::builder::stream::close_document
 		<< bsoncxx::builder::stream::finalize;
 	//moving the data_wrote to data view so we can work with it post creation
 	bsoncxx::document::view data = data_wrote.view();
 	//insert data to collection and store the result in result 
 	bsoncxx::stdx::optional<mongocxx::result::insert_one> result = accounts.insert_one(data);
+}
+
+
+int main() //dont forget to minimize function stacking 
+{
+	//for welcome screen
+	welcome_screen();
+	int response;
+	std::string option[] = { "1","2", "login", "register" };
+	response = menu_val(option);
+
+	system("CLS");
+
+	mongocxx::uri uri("mongodb://localhost:27017");
+	mongocxx::client client(uri);
+
+	//connect to db then collection
+	mongocxx::database db = client["BankOfCarlo"];
+	mongocxx::collection accounts = db["accounts"];
+
+	if (response == 0 || response == 2)//login
+	{
+		//if user aborts login
+		if (!login(&accounts))	return EXIT_SUCCESS;
+		menu();
+	}
+	else if (response == 1 || response == 3)//register
+	{
+		//if user aborts registeration
+		if (!register_account())	return EXIT_SUCCESS;
+		menu();
+	}
 
 	return EXIT_SUCCESS;
 }
